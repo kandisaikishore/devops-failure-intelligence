@@ -13,6 +13,14 @@ DFIP is a DevOps automation portfolio project that captures failed GitHub Action
 
 It is designed around a practical engineering problem: CI failures consume developer time, diagnostic information is scattered across workflow logs, and recurring failure patterns are often investigated repeatedly.
 
+## Live Deployment
+
+**Application URL:** Not verified yet.  
+**API URL:** Not verified yet.  
+**Health endpoint:** Add the confirmed route and public URL after successful deployment.
+
+A deployment configuration or deployment plan is not proof that a live service exists. These links will be filled in only after a reachable deployment is confirmed.
+
 ## Why this project?
 
 When a CI workflow fails, an engineer often has to open GitHub Actions, locate the failed job, read a large log, determine the probable cause, and communicate the next action. DFIP aims to streamline this first-response workflow by collecting failure events and producing a structured diagnosis.
@@ -202,16 +210,16 @@ Do not publish passing status badges or claim an end-to-end test passed until th
 
 ## Deployment
 
-A Render Blueprint file is included to describe a deployment shape. Before deploying:
+A Render Blueprint file is mentioned in the project layout, but the actual file has not been confirmed in the current repository check. Before deploying:
 
-- Review `render.yaml` against the exact application start commands and service paths.
-- Configure all secrets as Render environment variables.
-- Use a persistent managed PostgreSQL database for any environment where data must survive restarts.
+- Verify the Render configuration and exact application start commands.
+- Configure all secrets as hosting-provider environment variables.
+- Use a persistent managed PostgreSQL database where data must survive restarts.
 - Confirm the analyzer URL, database connection settings, migrations, health checks, and resource limits.
 - Configure the GitHub webhook only after the backend has a reachable HTTPS endpoint.
 - Run a deliberate failure workflow and validate the diagnosis end to end.
 
-**Deployment status:** this README describes the deployment approach; it does not imply that a live Render service is already running.
+**Deployment status:** no live service URL has been verified from the repository at the time of this update.
 
 ## Security notes
 
@@ -230,7 +238,7 @@ A Render Blueprint file is included to describe a deployment shape. Before deplo
 - [ ] Expand log classifiers with tested examples and confidence evaluation
 - [ ] Add repository-level access controls and incident search/filtering
 - [ ] Add metrics and structured observability for worker retries and analyzer latency
-- [ ] Validate the Render deployment and document its live URL when available
+- [ ] Verify deployment and document the live URL when available
 - [ ] Add a user-facing incident dashboard
 
 ## Contributing
