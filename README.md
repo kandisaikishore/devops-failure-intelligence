@@ -2,18 +2,18 @@
 
 [![Source](https://img.shields.io/badge/Source-GitHub-181717?logo=github)](https://github.com/kandisaikishore/devops-failure-intelligence) [![Last Commit](https://img.shields.io/github/last-commit/kandisaikishore/devops-failure-intelligence)](https://github.com/kandisaikishore/devops-failure-intelligence/commits/main)
 
-DFIP is a DevOps tooling project for investigating CI/CD and deployment failures and turning logs into more actionable diagnostic information. It aims to help engineers organize failure evidence and possible next steps while keeping remediation decisions under human control.
+DFIP is a DevOps engineering project for investigating CI/CD and deployment failures and turning log evidence into actionable diagnostic guidance. The goal is to shorten the first diagnostic pass while keeping remediation decisions under human control.
 
 ## Project goals
 
-- Improve the first-pass investigation of failed builds and deployments
-- Organize diagnostic evidence and recommended follow-up actions
-- Support repeatable analysis and failure tracking
-- Encourage human review instead of automatically changing production systems
+- Classify common build and deployment failure patterns
+- Help engineers find relevant evidence in logs
+- Organize diagnostic results and follow-up actions
+- Encourage repeatable analysis and human review before remediation
 
 ## Current implementation
 
-Review the repository source and configuration for actual integrations, runtime components, and supported input formats. Do not assume automatic GitHub log ingestion or autonomous remediation unless implemented and verified.
+Check the repository's source and configuration for the components, integrations, supported log inputs, and deployment capabilities implemented in this branch. Do not assume automatic GitHub log ingestion or autonomous remediation unless it is verified in the code.
 
 ## Getting started
 
@@ -22,20 +22,20 @@ git clone https://github.com/kandisaikishore/devops-failure-intelligence.git
 cd devops-failure-intelligence
 ```
 
-Follow the install/run instructions in the project manifests and configuration. Store API keys and deployment credentials in environment variables or a secret manager, never in source control.
+Follow the setup instructions in project manifests and configuration files. Store API keys, tokens, and deployment credentials in environment variables or a secret manager. Never commit secrets.
 
 ## Validation checklist
 
-- Test classification using representative success and failure logs
-- Include unknown and malformed log formats
-- Check that secrets and tokens are redacted before persistence or external API calls
-- Verify failure evidence points to relevant log lines
-- Handle unavailable APIs and rate limits safely
-- Run tests against each service and container configuration
+- Test representative failure logs and successful logs
+- Include unknown and malformed input formats
+- Verify that diagnostic evidence points to relevant log content
+- Redact secrets before persistence or external API calls
+- Handle unavailable APIs, timeouts, and rate limits
+- Run tests for all services and deployment configuration
 
 ## Production considerations
 
-Use least-privilege integration permissions, robust redaction, access controls, audit logging, monitoring, and documented rollback procedures. Diagnostic advice must be reviewed before production remediation.
+Use least-privilege integration permissions, authenticated access, robust redaction, audit logging, monitoring, and documented rollback procedures. Treat diagnostic recommendations as advisory and review them before applying production changes.
 
 ## Contributing
 
