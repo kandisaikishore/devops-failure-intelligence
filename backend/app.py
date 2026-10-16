@@ -3,9 +3,9 @@ import re
 from typing import Any
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-app = FastAPI(title="DevOps Failure Intelligence Platform", version="0.1.0",
+app = FastAPI(title="DevOps Failure Intelligence Platform", version="0.2.0",
               description="Analyze CI/CD logs and return evidence-linked diagnostic suggestions.")
 
 RULES: list[dict[str, Any]] = [
@@ -36,24 +36,31 @@ RULES: list[dict[str, Any]] = [
 ]
 
 SECRET_PATTERNS = [
-    # Redact common credential assignments before matched log lines are returned.
-    (re.compile(r"(?i)\b(authorization\s*[:=]\s*bearer)\s+[A-Za-z0-9._~+/=-]+"), r"\1 [REDACTED]"),
+    (re.compile(r"(?i)\b(authorization\s*[:=]\s*bearer)\s+[^\s,;]+"), r"\1 [REDACTED]"),
     (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"), "[REDACTED_GITHUB_TOKEN]"),
     (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "[REDACTED_AWS_ACCESS_KEY]"),
-    (re.compile(r'(?i)\b([A-Z0-9_.-]*(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|auth[_-]?token|token)[A-Z0-9_.-]*)(\s*[:=]\s*)(?!\[REDACTED_)("[^"]*"|\'[^\']*\'|[^\s,;]+)'), r"\1\2[REDACTED]"),
+    (re.compile(r"(?i)\b(aws_secret_access_key\s*[:=]\s*)[^\s,;]+"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)\b([A-Z0-9_.-]*(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|auth[_-]?token|token)[A-Z0-9_.-]*)(\s*[:=]\s*)(?!\[REDACTED\])(?:\"[^\"]*\"|'[^']*'|[^\s,;]+)"), r"\1\2[REDACTED]"),
+    (re.compile(r"(?i)\b([A-Z0-9_.-]*(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|auth[_-]?token|token)[A-Z0-9_.-]*)(\s*[:=]\s*)\"[^\"]*(?:$)"), r"\1\2\"[REDACTED]\""),
 ]
 
 def redact_line(line: str) -> str:
-    """Mask common secrets before exposing matched log evidence to the caller."""
+    """Mask common secret formats before exposing matched log evidence."""
     redacted = line[:500]
     for pattern, replacement in SECRET_PATTERNS:
         redacted = pattern.sub(replacement, redacted)
     return redacted
 
-
 class AnalyzeRequest(BaseModel):
-    logs: str = Field(min_length=1, max_length=200_000, description="Sanitized CI/CD log text")
+    logs: str = Field(min_length=1, max_length=200_000, description="CI/CD log text")
     service: str = Field(default="unknown-service", max_length=120)
+
+    @field_validator("logs")
+    @classmethod
+    def logs_must_contain_non_whitespace(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("logs must contain at least one non-whitespace character")
+        return value
 
 class Finding(BaseModel):
     rule_id: str
@@ -72,7 +79,7 @@ class AnalyzeResponse(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status":"ok","service":"dfip-api","version":"0.1.0"}
+    return {"status":"ok","service":"dfip-api","version":"0.2.0"}
 
 @app.get("/api/rules")
 def list_rules():
@@ -90,7 +97,7 @@ def analyze(request: AnalyzeRequest):
     status = "findings" if findings else "unclassified"
     summary = (f"Detected {len(findings)} likely failure pattern(s). Review the evidence and validate next steps."
                if findings else "No known failure pattern matched. Review the sanitized log and add a rule if this recurs.")
-    return AnalyzeResponse(service=request.service.strip() or "unknown-service", status=status, findings=findings, summary=summary)
+    return AnalyzeResponse(service=request.service.strip()[:120] or "unknown-service", status=status, findings=findings, summary=summary)
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
@@ -105,11 +112,11 @@ button{margin-top:14px;background:var(--accent);border:0;border-radius:9px;paddi
 .muted{font-size:13px;color:var(--muted)}.finding{border:1px solid var(--line);border-radius:12px;padding:15px;margin:12px 0}.finding h3{margin:6px 0}.finding pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#090f1c;border-radius:8px;padding:10px;color:#c5d3f2;font-size:12px}
 .empty{border:1px dashed var(--line);padding:20px;border-radius:12px;color:var(--muted)}footer{margin-top:22px;color:var(--muted);font-size:12px}@media(max-width:720px){.grid{grid-template-columns:1fr}main{padding:25px 14px}}
 </style></head><body><main><div class="eyebrow">DFIP · Developer tools</div><h1>Turn failed builds into a clear next step.</h1>
-<p>Paste sanitized CI/CD logs. DFIP matches common failure signatures, cites matching lines, and suggests a practical investigation path.</p>
+<p>Paste CI/CD logs. DFIP matches common failure signatures, cites matching lines, and suggests a practical investigation path. Output evidence is redacted before returning it.</p>
 <div class="grid"><section class="card"><h2>Analyze a failure</h2><form id="form"><label for="service">Service or repository</label><input id="service" maxlength="120" value="sample-api">
 <label for="logs">Build or deployment logs</label><textarea id="logs" maxlength="200000" required>[ERROR] Could not resolve dependencies for project sample-api
 [ERROR] Dependency resolution failed: package version not found</textarea>
-<p class="muted">Remove tokens, passwords, personal data, and private URLs before submitting. This MVP processes logs in memory and does not persist them.</p><button id="submit" type="submit">Analyze logs →</button></form></section>
+<p class="muted">Avoid submitting credentials or personal data. This MVP processes logs in memory and does not persist them.</p><button id="submit" type="submit">Analyze logs →</button></form></section>
 <aside class="card"><span class="pill">MVP · Rule-based</span><h2>What you get</h2><p><strong>Evidence first</strong><br>Matched log lines explain why a rule triggered.</p><p><strong>Actionable suggestions</strong><br>Recommendations point to a concrete next step.</p><p><strong>Honest uncertainty</strong><br>Unknown patterns are reported as unclassified.</p><p class="muted">AI summaries, GitHub Actions ingestion, incident history, and alerts are future milestones—not enabled in this MVP.</p></aside></div>
 <section id="results" aria-live="polite"><div class="empty">Run an analysis to see findings here.</div></section><footer>DFIP is an advisory tool. Review changes and follow your team's production change process.</footer></main>
 <script>
