@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from backend.app import app
+from backend.app import app, redact_line
 
 client = TestClient(app)
 
@@ -7,6 +7,7 @@ def test_health_endpoint():
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+    assert response.json()["version"] == "0.2.0"
 
 def test_dependency_error_returns_evidence_and_recommendation():
     response = client.post("/api/analyze", json={"service":"payments-api","logs":"[ERROR] Could not resolve dependencies for project\nDependency resolution failed"})
@@ -23,8 +24,9 @@ def test_unknown_log_is_not_misdiagnosed():
     assert response.json()["status"] == "unclassified"
     assert response.json()["findings"] == []
 
-def test_empty_logs_are_rejected():
+def test_empty_and_whitespace_logs_are_rejected():
     assert client.post("/api/analyze", json={"logs":""}).status_code == 422
+    assert client.post("/api/analyze", json={"logs":"   \n  "}).status_code == 422
 
 def test_large_log_is_rejected():
     assert client.post("/api/analyze", json={"logs":"x"*200001}).status_code == 422
@@ -37,7 +39,6 @@ def test_configuration_failure_rule_matches():
     response = client.post("/api/analyze", json={"logs":"Error: environment variable DATABASE_URL not set"})
     assert response.status_code == 200
     assert any(f["rule_id"] == "configuration" for f in response.json()["findings"])
-
 
 def test_all_failure_categories_are_detected():
     cases = {
@@ -53,73 +54,51 @@ def test_all_failure_categories_are_detected():
         assert response.status_code == 200, expected_rule
         assert expected_rule in [finding["rule_id"] for finding in response.json()["findings"]], expected_rule
 
-
-def test_common_secret_values_are_redacted_from_evidence():
+def test_password_and_api_keys_are_redacted_from_evidence():
     secret = "SuperSecretValue987"
+    quoted = "private value with spaces"
     response = client.post("/api/analyze", json={
-        "logs": f"Could not resolve dependencies; password={secret}"
+        "logs": f'Could not resolve dependencies; password={secret}; OPENAI_API_KEY="{quoted}"'
     })
     assert response.status_code == 200
-    evidence = "\n".join(
-        line for finding in response.json()["findings"] for line in finding["evidence"]
-    )
+    evidence = "\n".join(line for finding in response.json()["findings"] for line in finding["evidence"])
     assert secret not in evidence
+    assert quoted not in evidence
     assert "[REDACTED]" in evidence
-
 
 def test_bearer_tokens_are_redacted_from_evidence():
     token = "eyJhbGciOiJub25lIn0.payload.signature"
-    response = client.post("/api/analyze", json={
-        "logs": f"Could not resolve dependencies; Authorization: Bearer {token}"
-    })
-    assert response.status_code == 200
-    evidence = "\n".join(
-        line for finding in response.json()["findings"] for line in finding["evidence"]
-    )
+    evidence = redact_line(f"Could not resolve dependencies; Authorization: Bearer {token}")
     assert token not in evidence
     assert "[REDACTED]" in evidence
-
 
 def test_github_tokens_are_redacted_from_evidence():
     token = "ghp_" + "A" * 36
-    response = client.post("/api/analyze", json={
-        "logs": f"Could not resolve dependencies; token={token}"
-    })
-    assert response.status_code == 200
-    evidence = "\n".join(
-        line for finding in response.json()["findings"] for line in finding["evidence"]
-    )
+    evidence = redact_line(f"Could not resolve dependencies; token={token}")
     assert token not in evidence
     assert "[REDACTED_GITHUB_TOKEN]" in evidence
 
+def test_aws_access_and_secret_keys_are_redacted():
+    access_key = "AKIA1234567890ABCDEF"
+    secret = "AWSsecretValue123456"
+    evidence = redact_line(f"Could not resolve dependencies; AWS_ACCESS_KEY_ID={access_key}; AWS_SECRET_ACCESS_KEY={secret}")
+    assert access_key not in evidence
+    assert secret not in evidence
+    assert "[REDACTED_AWS_ACCESS_KEY]" in evidence
+    assert "[REDACTED]" in evidence
 
-def test_blank_service_name_uses_safe_default():
+def test_blank_or_oversized_service_name_is_handled():
     response = client.post("/api/analyze", json={"service":"   ", "logs":"unknown event"})
     assert response.status_code == 200
     assert response.json()["service"] == "unknown-service"
+    long_name = client.post("/api/analyze", json={"service":"a"*121, "logs":"unknown event"})
+    assert long_name.status_code == 422
 
-
-def test_prefixed_api_key_and_quoted_secret_are_fully_redacted():
-    secret = "private value with spaces"
+def test_evidence_lines_are_limited_and_redacted():
+    secret = "NeverShowThisToken"
     response = client.post("/api/analyze", json={
-        "logs": f'Could not resolve dependencies; OPENAI_API_KEY="{secret}"'
+        "logs": f"Could not resolve dependencies; password={secret}; " + "x"*900
     })
-    assert response.status_code == 200
-    evidence = "\\n".join(
-        line for finding in response.json()["findings"] for line in finding["evidence"]
-    )
-    assert secret not in evidence
-    assert "OPENAI_API_KEY=[REDACTED]" in evidence or 'OPENAI_API_KEY="[REDACTED]"' in evidence
-
-
-def test_aws_secret_access_key_is_redacted():
-    secret = "AWSsecretValue123456"
-    response = client.post("/api/analyze", json={
-        "logs": f"Could not resolve dependencies; AWS_SECRET_ACCESS_KEY={secret}"
-    })
-    assert response.status_code == 200
-    evidence = "\\n".join(
-        line for finding in response.json()["findings"] for line in finding["evidence"]
-    )
-    assert secret not in evidence
-    assert "[REDACTED]" in evidence
+    evidence = response.json()["findings"][0]["evidence"]
+    assert all(len(line) <= 500 for line in evidence)
+    assert secret not in "\n".join(evidence)
