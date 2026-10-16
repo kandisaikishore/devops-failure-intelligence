@@ -48,8 +48,16 @@ SECRET_PATTERNS = [
 def redact_line(line: str) -> str:
     """Mask common secret formats before exposing matched log evidence."""
     redacted = line[:500]
-    for pattern, replacement in SECRET_PATTERNS:
-        redacted = pattern.sub(replacement, redacted)
+    # Specific token formats must be replaced before generic token=password rules.
+    for pattern, value in (
+        (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"), "[REDACTED_GITHUB_TOKEN]"),
+        (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "[REDACTED_AWS_ACCESS_KEY]"),
+        (re.compile(r"(?i)\b(authorization\s*[:=]\s*bearer)\s+[^\s,;]+"), r"\1 [REDACTED]"),
+        (re.compile(r"(?i)\b(aws_secret_access_key\s*[:=]\s*)[^\s,;]+"), r"\1[REDACTED]"),
+    ):
+        redacted = pattern.sub(value, redacted)
+    for pattern, value in SECRET_PATTERNS:
+        redacted = pattern.sub(value, redacted)
     return redacted
 
 class AnalyzeRequest(BaseModel):
