@@ -35,6 +35,22 @@ RULES: list[dict[str, Any]] = [
   "fix":"Inspect runner/container resource limits and memory or disk usage. Reduce unnecessary artifacts or parallelism, and increase limits only after confirming the bottleneck."},
 ]
 
+SECRET_PATTERNS = [
+    # Redact common credential assignments before matched log lines are returned.
+    (re.compile(r"(?i)\b(authorization\s*[:=]\s*bearer)\s+[A-Za-z0-9._~+/=-]+"), r"\1 [REDACTED]"),
+    (re.compile(r"(?i)\b(password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret)\b(\s*[:=]\s*)([\"']?)[^\s,;\"']+"), r"\1\2[REDACTED]"),
+    (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"), "[REDACTED_GITHUB_TOKEN]"),
+    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "[REDACTED_AWS_ACCESS_KEY]"),
+]
+
+def redact_line(line: str) -> str:
+    """Mask common secrets before exposing matched log evidence to the caller."""
+    redacted = line[:500]
+    for pattern, replacement in SECRET_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
+    return redacted
+
+
 class AnalyzeRequest(BaseModel):
     logs: str = Field(min_length=1, max_length=200_000, description="Sanitized CI/CD log text")
     service: str = Field(default="unknown-service", max_length=120)
@@ -70,7 +86,7 @@ def analyze(request: AnalyzeRequest):
         matches = [line for line in lines if any(re.search(p, line, re.IGNORECASE) for p in rule["patterns"])]
         if matches:
             findings.append(Finding(rule_id=rule["id"], title=rule["title"], severity=rule["severity"],
-                cause=rule["cause"], recommendation=rule["fix"], evidence=matches[:3]))
+                cause=rule["cause"], recommendation=rule["fix"], evidence=[redact_line(line) for line in matches[:3]]))
     status = "findings" if findings else "unclassified"
     summary = (f"Detected {len(findings)} likely failure pattern(s). Review the evidence and validate next steps."
                if findings else "No known failure pattern matched. Review the sanitized log and add a rule if this recurs.")
