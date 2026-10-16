@@ -36,14 +36,13 @@ RULES: list[dict[str, Any]] = [
 ]
 
 SECRET_PATTERNS = [
+    # Match credential-specific formats before generic key=value masking.
     (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"), "[REDACTED_GITHUB_TOKEN]"),
-    (re.compile(r"(?i)\b(authorization\s*[:=]\s*bearer)\s+[^\s,;]+"), r"\1 [REDACTED]"),
-
     (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "[REDACTED_AWS_ACCESS_KEY]"),
+    (re.compile(r"(?i)\b(authorization\s*[:=]\s*bearer)\s+[^\s,;]+"), r"\1 [REDACTED]"),
     (re.compile(r"(?i)\b(aws_secret_access_key\s*[:=]\s*)[^\s,;]+"), r"\1[REDACTED]"),
-    (re.compile(r"(?i)(\b[A-Z0-9_.-]*(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|auth[_-]?token|token)[A-Z0-9_.-]*\s*[:=]\s*)gh[pousr]_[A-Za-z0-9]{20,}"), r"\1[REDACTED_GITHUB_TOKEN]"),
-    (re.compile(r"(?i)\b([A-Z0-9_.-]*(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|auth[_-]?token|token)[A-Z0-9_.-]*)(\s*[:=]\s*)(?!\[REDACTED\])(?:\"[^\"]*\"|'[^']*'|[^\s,;]+)"), r"\1\2[REDACTED]"),
-    (re.compile(r"(?i)\b([A-Z0-9_.-]*(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|auth[_-]?token|token)[A-Z0-9_.-]*)(\s*[:=]\s*)\"[^\"]*(?:$)"), r"\1\2\"[REDACTED]\""),
+    (re.compile(r"(?i)(\b[A-Z0-9_.-]*(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|auth[_-]?token|token)[A-Z0-9_.-]*\s*[:=]\s*)(gh[pousr]_[A-Za-z0-9]{20,})"), r"\1[REDACTED_GITHUB_TOKEN]"),
+    (re.compile(r"(?i)\b([A-Z0-9_.-]*(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|auth[_-]?token|token)[A-Z0-9_.-]*)(\s*[:=]\s*)(?!\[REDACTED\])(?:"[^"]*"|'[^']*'|[^\s,;]+)"), r"\1\2[REDACTED]"),
 ]
 
 def redact_line(line: str) -> str:
