@@ -48,16 +48,18 @@ SECRET_PATTERNS = [
 def redact_line(line: str) -> str:
     """Mask common secret formats before exposing matched log evidence."""
     redacted = line[:500]
-    # Specific token formats must be replaced before generic token=password rules.
-    for pattern, value in (
-        (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"), "[REDACTED_GITHUB_TOKEN]"),
-        (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "[REDACTED_AWS_ACCESS_KEY]"),
-        (re.compile(r"(?i)\b(authorization\s*[:=]\s*bearer)\s+[^\s,;]+"), r"\1 [REDACTED]"),
-        (re.compile(r"(?i)\b(aws_secret_access_key\s*[:=]\s*)[^\s,;]+"), r"\1[REDACTED]"),
-    ):
-        redacted = pattern.sub(value, redacted)
-    for pattern, value in SECRET_PATTERNS:
-        redacted = pattern.sub(value, redacted)
+    # Remove structured credentials first so generic key/value handling cannot
+    # downgrade their masking or leave token fragments in returned evidence.
+    redacted = re.sub(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b", "[REDACTED_GITHUB_TOKEN]", redacted)
+    redacted = re.sub(r"\bAKIA[0-9A-Z]{16}\b", "[REDACTED_AWS_ACCESS_KEY]", redacted)
+    redacted = re.sub(r"(?i)(authorization\s*[:=]\s*bearer)\s+[^\s,;]+", r"\1 [REDACTED]", redacted)
+    redacted = re.sub(r"(?i)(aws_secret_access_key\s*[:=]\s*)[^\s,;]+", r"\1[REDACTED]", redacted)
+    # Only redact values that are not already a placeholder.
+    redacted = re.sub(
+        r"""(?i)\b([A-Z0-9_.-]*(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|auth[_-]?token|token)[A-Z0-9_.-]*)(\s*[:=]\s*)(?!\[REDACTED(?:_[A-Z]+)*\])(?:"[^"]*"|'[^']*'|[^\s,;]+)""",
+        r"\1\2[REDACTED]",
+        redacted,
+    )
     return redacted
 
 class AnalyzeRequest(BaseModel):
