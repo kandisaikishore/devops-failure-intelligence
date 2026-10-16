@@ -97,3 +97,29 @@ def test_blank_service_name_uses_safe_default():
     response = client.post("/api/analyze", json={"service":"   ", "logs":"unknown event"})
     assert response.status_code == 200
     assert response.json()["service"] == "unknown-service"
+
+
+def test_prefixed_api_key_and_quoted_secret_are_fully_redacted():
+    secret = "private value with spaces"
+    response = client.post("/api/analyze", json={
+        "logs": f'Could not resolve dependencies; OPENAI_API_KEY="{secret}"'
+    })
+    assert response.status_code == 200
+    evidence = "\\n".join(
+        line for finding in response.json()["findings"] for line in finding["evidence"]
+    )
+    assert secret not in evidence
+    assert "OPENAI_API_KEY=[REDACTED]" in evidence or 'OPENAI_API_KEY="[REDACTED]"' in evidence
+
+
+def test_aws_secret_access_key_is_redacted():
+    secret = "AWSsecretValue123456"
+    response = client.post("/api/analyze", json={
+        "logs": f"Could not resolve dependencies; AWS_SECRET_ACCESS_KEY={secret}"
+    })
+    assert response.status_code == 200
+    evidence = "\\n".join(
+        line for finding in response.json()["findings"] for line in finding["evidence"]
+    )
+    assert secret not in evidence
+    assert "[REDACTED]" in evidence
