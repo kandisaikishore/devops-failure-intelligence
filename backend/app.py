@@ -37,10 +37,10 @@ RULES: list[dict[str, Any]] = [
 
 SECRET_PATTERNS = [
     # Redact common credential assignments before matched log lines are returned.
-    (re.compile(r"(?i)\\b(authorization\\s*[:=]\\s*bearer)\\s+[A-Za-z0-9._~+/=-]+"), r"\\1 [REDACTED]"),
-    (re.compile(r"(?i)\\b(password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret)\\b(\\s*[:=]\\s*)([\"']?)[^\\s,;\"']+"), r"\\1\\2[REDACTED]"),
-    (re.compile(r"\\bgh[pousr]_[A-Za-z0-9]{20,}\\b"), "[REDACTED_GITHUB_TOKEN]"),
-    (re.compile(r"\\bAKIA[0-9A-Z]{16}\\b"), "[REDACTED_AWS_ACCESS_KEY]"),
+    (re.compile(r"(?i)\b(authorization\s*[:=]\s*bearer)\s+[A-Za-z0-9._~+/=-]+"), r"\1 [REDACTED]"),
+    (re.compile(r"(?i)\b(password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret)\b(\s*[:=]\s*)([\"']?)[^\s,;\"']+"), r"\1\2[REDACTED]"),
+    (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"), "[REDACTED_GITHUB_TOKEN]"),
+    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "[REDACTED_AWS_ACCESS_KEY]"),
 ]
 
 def redact_line(line: str) -> str:
