@@ -56,7 +56,7 @@ def redact_line(line: str) -> str:
     redacted = re.sub(r"(?i)(aws_secret_access_key\s*[:=]\s*)[^\s,;]+", r"\1[REDACTED]", redacted)
     # Only redact values that are not already a placeholder.
     redacted = re.sub(
-        r"""(?i)\b([A-Z0-9_.-]*(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|auth[_-]?token|token)[A-Z0-9_.-]*)(\s*[:=]\s*)(?!\[REDACTED(?:_[A-Z]+)*\])(?:"[^"]*"|'[^']*'|[^\s,;]+)""",
+        r"""(?i)\b([A-Z0-9_.-]*(?:password|passwd|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|auth[_-]?token|token)[A-Z0-9_.-]*)(\s*[:=]\s*)(?!\[REDACTED(?:_[A-Z0-9_]+)*\])(?:"[^"]*"|'[^']*'|[^\s,;]+)""",
         r"\1\2[REDACTED]",
         redacted,
     )
