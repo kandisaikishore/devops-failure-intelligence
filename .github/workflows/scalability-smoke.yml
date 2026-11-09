@@ -35,7 +35,7 @@ jobs:
           fi
 
       - name: Check Dockerfile configuration when present
-        if: hashFiles('Dockerfile') != ''
+        if: ${{ hashFiles('Dockerfile') != '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -48,7 +48,7 @@ jobs:
           fi
 
       - name: Report compose service and health-check declarations
-        if: hashFiles('docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml') != ''
+        if: ${{ hashFiles('docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml') != '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -56,7 +56,7 @@ jobs:
           echo "Compose configuration discovered; validate actual deployment limits in staging."
 
       - name: Check Node package manifests when present
-        if: hashFiles('package.json') != ''
+        if: ${{ hashFiles('package.json') != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -78,14 +78,14 @@ jobs:
           python-version: '3.12'
 
       - name: Compile Python sources
-        if: hashFiles('**/*.py') != ''
+        if: ${{ hashFiles('**/*.py') != '' }}
         shell: bash
         run: |
           set -euo pipefail
           python -m compileall -q .
 
       - name: Check Java source compilation when no build system exists
-        if: hashFiles('**/*.java') != '' && hashFiles('pom.xml', 'build.gradle', 'build.gradle.kts', 'gradlew') == ''
+        if: ${{ hashFiles('**/*.java') != '' && hashFiles('pom.xml', 'build.gradle', 'build.gradle.kts', 'gradlew') == '' }}
         shell: bash
         run: |
           set -euo pipefail
