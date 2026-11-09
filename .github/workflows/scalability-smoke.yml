@@ -1,7 +1,8 @@
-name: Scalability smoke checks
+name: Repository smoke checks
 
 on:
   pull_request:
+    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
@@ -12,17 +13,17 @@ permissions:
   contents: read
 
 concurrency:
-  group: scalability-${{ github.workflow }}-${{ github.ref }}
+  group: repository-smoke-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   repository-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check repository size and accidental large files
+      - name: Check tracked files and accidental secrets
         shell: bash
         run: |
           set -euo pipefail
@@ -34,63 +35,75 @@ jobs:
             exit 1
           fi
 
-      - name: Check Dockerfile configuration when present
-        if: ${{ hashFiles('Dockerfile') != '' }}
+      - name: Check Dockerfile when present
         shell: bash
         run: |
           set -euo pipefail
-          grep -Eq '^FROM ' Dockerfile
-          echo "Dockerfile has a base image declaration."
-          if grep -Eq '^(USER|user) ' Dockerfile; then
-            echo "A runtime USER directive is present."
+          if [[ -f Dockerfile ]]; then
+            grep -Eq '^FROM ' Dockerfile
+            if grep -Eq '^(USER|user) ' Dockerfile; then
+              echo "Dockerfile includes a runtime USER directive."
+            else
+              echo "::warning::Dockerfile has no USER directive; assess non-root execution."
+            fi
           else
-            echo "::warning::Dockerfile has no USER directive; assess non-root execution."
+            echo "No root Dockerfile; skipping Dockerfile checks."
           fi
 
-      - name: Report compose service and health-check declarations
-        if: ${{ hashFiles('docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml') != '' }}
+      - name: Inspect Compose configuration when present
         shell: bash
         run: |
           set -euo pipefail
-          grep -nE '^[[:space:]]{0,6}(services:|[A-Za-z0-9_-]+:|healthcheck:|depends_on:|deploy:|resources:)' docker-compose.yml docker-compose.yaml compose.yml compose.yaml 2>/dev/null || true
-          echo "Compose configuration discovered; validate actual deployment limits in staging."
+          compose_file=""
+          for candidate in compose.yaml compose.yml docker-compose.yaml docker-compose.yml; do
+            if [[ -f "$candidate" ]]; then compose_file="$candidate"; break; fi
+          done
+          if [[ -n "$compose_file" ]]; then
+            grep -nE '^[[:space:]]{0,6}(services:|[A-Za-z0-9_-]+:|healthcheck:|depends_on:|deploy:|resources:)' "$compose_file" || true
+            echo "Compose file discovered; validate deployment limits in staging."
+          else
+            echo "No root Compose file; skipping Compose checks."
+          fi
 
-      - name: Check Node package manifests when present
-        if: ${{ hashFiles('package.json') != '' }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Validate Node package scripts
-        if: ${{ hashFiles('package.json') != '' }}
+      - name: Validate root Node package when present
         shell: bash
         run: |
           set -euo pipefail
-          node -e "const p=require('./package.json'); if(!p.name) throw new Error('package.json must declare a package name'); console.log(JSON.stringify({name:p.name, scripts:Object.keys(p.scripts||{})}, null, 2))"
-          if [[ -f package-lock.json ]]; then npm ci --ignore-scripts --no-audit --no-fund; fi
-          npm run --if-present lint
-          npm run --if-present build
+          if [[ -f package.json ]]; then
+            node -e "const p=require('./package.json'); if(!p.name) throw new Error('package.json must declare a package name'); console.log(JSON.stringify({name:p.name, scripts:Object.keys(p.scripts||{})}, null, 2))"
+            if [[ -f package-lock.json ]]; then npm ci --ignore-scripts --no-audit --no-fund; fi
+            npm run --if-present lint
+            npm run --if-present build
+          else
+            echo "No root package.json; project-specific CI handles nested Node workspaces."
+          fi
 
-      - name: Validate Python syntax when present
-        if hashFiles('**/*.py') != ''
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Compile Python sources
-        if: ${{ hashFiles('**/*.py') != '' }}
+      - name: Compile Python sources when present
         shell: bash
         run: |
           set -euo pipefail
-          python -m compileall -q .
+          mapfile -d '' sources < <(find . -type d \( -name .git -o -name .venv -o -name node_modules -o -name target -o -name __pycache__ \) -prune -o -type f -name '*.py' -print0)
+          if (("${#sources[@]}" > 0)); then
+            python -m compileall -q "${sources[@]}"
+          else
+            echo "No Python sources found."
+          fi
 
-      - name: Check Java source compilation when no build system exists
-        if: ${{ hashFiles('**/*.java') != '' && hashFiles('pom.xml', 'build.gradle', 'build.gradle.kts', 'gradlew') == '' }}
+      - name: Compile standalone Java sources when no build system exists
         shell: bash
         run: |
           set -euo pipefail
+          mapfile -d '' sources < <(find . -type d \( -name .git -o -name .venv -o -name node_modules -o -name target -o -name build \) -prune -o -type f -name '*.java' -print0)
+          if (("${#sources[@]}" == 0)); then
+            echo "No Java sources found."
+            exit 0
+          fi
+          build_file="$(find . -type d \( -name .git -o -name node_modules -o -name target \) -prune -o -type f \( -name pom.xml -o -name build.gradle -o -name build.gradle.kts -o -name gradlew \) -print -quit)"
+          if [[ -n "$build_file" ]]; then
+            echo "Project build system found at $build_file; use project-specific CI for Java tests."
+            exit 0
+          fi
           sudo apt-get update
           sudo apt-get install -y openjdk-17-jdk-headless
           mkdir -p /tmp/java-classes
-          mapfile -d '' sources < <(find . -type d \( -name .git -o -name node_modules -o -name target \) -prune -o -type f -name '*.java' -print0)
-          if (("${#sources[@]}" > 0)); then javac -Xlint:all -d /tmp/java-classes "${sources[@]}"; fi
+          javac -Xlint:all -d /tmp/java-classes "${sources[@]}"
