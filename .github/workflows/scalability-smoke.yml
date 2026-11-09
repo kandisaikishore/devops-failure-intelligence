@@ -62,7 +62,7 @@ jobs:
           node-version: '22'
 
       - name: Validate Node package scripts
-        if: hashFiles('package.json') != ''
+        if: ${{ hashFiles('package.json') != '' }}
         shell: bash
         run: |
           set -euo pipefail
